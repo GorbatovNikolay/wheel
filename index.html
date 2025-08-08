@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Колесо комплиментов для Маши 💙</title>
+<style>
+  :root{
+    --bg1:#eaf4ff; --bg2:#b3d9ff; --accent:#0077cc; --text:#002b4d;
+    --sliceA:#cce6ff; --sliceB:#b3daff;
+  }
+  body{ margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+        background:radial-gradient(circle at 50% 20%,var(--bg1),var(--bg2));
+        color:var(--text); min-height:100vh; display:flex; flex-direction:column; align-items:center;}
+  header{ text-align:center; padding:18px 12px 8px;}
+  h1{ margin:0 0 6px; color:var(--accent); font-weight:800; }
+  .app{ width:min(920px,96vw); padding:12px 12px 40px; }
+  .card{ background:#fff; border-radius:16px; box-shadow:0 10px 30px rgba(0,0,0,.08); padding:14px; }
+  .wheel-wrap{ display:flex; flex-direction:column; align-items:center; gap:12px; }
+  .wheel-area{ position:relative; width:min(520px, 92vw); }
+  canvas#wheel{ display:block; border-radius:50%; background:#fff; box-shadow:0 8px 24px rgba(0,0,0,.15); }
+  .pointer{ position:absolute; top:-8px; left:50%; transform:translateX(-50%);
+    width:0;height:0;border-left:16px solid transparent;border-right:16px solid transparent;border-bottom:28px solid var(--accent);
+    filter:drop-shadow(0 2px 4px rgba(0,0,0,.25)); z-index:3;}
+  .controls{ display:flex; gap:10px; flex-wrap:wrap; justify-content:center; margin-top:6px;}
+  button{ appearance:none; border:none; border-radius:10px; padding:10px 14px; cursor:pointer; font-weight:700;
+          background:var(--accent); color:#fff; box-shadow:0 6px 16px rgba(0,0,0,.15); }
+  button.secondary{ background:#f1f1f4; color:#333; }
+  .compliment{ text-align:center; min-height:48px; font-size:20px; font-weight:700; color:var(--text); }
+  .compliment.fade-in{ animation:fade .65s ease both; }
+  @keyframes fade{ from{opacity:0; transform:translateY(6px);} to{opacity:1; transform:none;} }
+
+  /* Конфетти — отдельный слой */
+  #confettiCanvas{
+    position:fixed; inset:0; pointer-events:none; z-index:999;
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>Колесо комплиментов для Маши 💙</h1>
+  <div class="sub">Нажми «Крутить» — и судьба выберет тёплые слова ✨</div>
+</header>
+
+<main class="app">
+  <section class="card wheel-wrap">
+    <div class="wheel-area">
+      <div class="pointer"></div>
+      <canvas id="wheel" aria-label="Колесо комплиментов"></canvas>
+    </div>
+    <div class="controls">
+      <button id="spinBtn">🌀 Крутить</button>
+      <button id="resetBtn" class="secondary">♻️ Сбросить</button>
+    </div>
+    <div id="compliment" class="compliment">Нажми «Крутить», чтобы порадовать Машу 💝</div>
+  </section>
+</main>
+
+<!-- Canvas для конфетти -->
+<canvas id="confettiCanvas"></canvas>
+
+<script>
+/* ==== ДАННЫЕ ==== */
+const DEFAULT_COMPLIMENTS = [
+  "Маша, ты моё чудо 🌸","Твоя улыбка делает мир ярче 💖","Ты красивее любого рассвета ☀️",
+  "С тобой каждый день — праздник 🎉","Ты мой лучший друг и любовь 💕","С тобой жизнь — сказка 📖",
+  "Ты вдохновение для меня ✨","Ты невероятно умная и красивая 🌹","Ты — нежность и сила одновременно 💫",
+  "Твои глаза — мой любимый космос ✨","Ты наполняешь дом теплом 🏡","С тобой легко быть собой 🤍"
+];
+let compliments = DEFAULT_COMPLIMENTS.slice();
+
+/* ==== DOM ==== */
+const wheel = document.getElementById("wheel");
+const ctx = wheel.getContext("2d");
+const spinBtn = document.getElementById("spinBtn");
+const resetBtn = document.getElementById("resetBtn");
+const complimentEl = document.getElementById("compliment");
+
+/* ==== CANVAS РАЗМЕР + DPR ==== */
+function resizeCanvas(){
+  const box = wheel.parentElement;
+  const size = Math.floor(Math.min(box.clientWidth, window.innerWidth*0.92));
+  const dpr = window.devicePixelRatio || 1;
+  wheel.style.width = size + "px";
+  wheel.style.height = size + "px";
+  wheel.width = Math.floor(size * dpr);
+  wheel.height = Math.floor(size * dpr);
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  drawWheel(currentAngle);
+}
+window.addEventListener('resize', resizeCanvas);
+
+function getVar(name, fallback){ 
+  const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  return v || fallback;
+}
+const sliceA = ()=> getVar('--sliceA','#cce6ff');
+const sliceB = ()=> getVar('--sliceB','#b3daff');
+
+function drawWheel(angle=0, highlightIndex=null){
+  const N = Math.max(compliments.length, 1);
+  const R = Math.min(wheel.clientWidth, wheel.clientHeight)/2;
+  const cx = R, cy = R;
+  ctx.clearRect(0,0,wheel.clientWidth, wheel.clientHeight);
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate(angle);
+  const arc = 2*Math.PI/N;
+
+  for(let i=0;i<N;i++){
+    ctx.beginPath();
+    ctx.moveTo(0,0);
+    ctx.fillStyle = (i%2===0 ? sliceA() : sliceB());
+    ctx.arc(0,0,R, i*arc, (i+1)*arc);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.strokeStyle = "rgba(0,0,0,.15)";
+    ctx.lineWidth = 1.2;
+    ctx.moveTo(0,0);
+    ctx.lineTo(R*Math.cos((i+1)*arc), R*Math.sin((i+1)*arc));
+    ctx.stroke();
+
+    ctx.save();
+    ctx.rotate(arc*(i+0.5));
+    ctx.textAlign = "right";
+    ctx.font = "700 18px system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif";
+    const tx = R - 16, ty = 8;
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = "rgba(0,0,0,.35)";
+    ctx.strokeText(`№${i+1}`, tx, ty);
+    ctx.fillStyle = "#fff";
+    ctx.fillText(`№${i+1}`, tx, ty);
+    ctx.restore();
+  }
+
+  ctx.beginPath();
+  ctx.lineWidth = 6;
+  ctx.strokeStyle = "rgba(0,0,0,.12)";
+  ctx.arc(0,0,R-3, 0, 2*Math.PI);
+  ctx.stroke();
+
+  if (highlightIndex !== null){
+    ctx.save();
+    ctx.rotate(arc*(highlightIndex+0.5));
+    ctx.beginPath();
+    ctx.moveTo(0,0);
+    ctx.fillStyle="rgba(0,0,0,.07)";
+    ctx.arc(0,0,R, -arc/2, arc/2);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
+/* ==== СПИН ==== */
+let spinning=false, currentAngle=0, targetAngle=0, startTime=0, duration=0, targetIndex=0;
+function easeOutCubic(t){ return 1 - Math.pow(1 - t, 3); }
+
+function startSpin(){
+  if(spinning || compliments.length===0) return;
+  const N = compliments.length, arc = 2*Math.PI/N;
+  targetIndex = Math.floor(Math.random() * N);
+  const center = (targetIndex + 0.5) * arc;
+  const fullTurns = 4 + Math.floor(Math.random()*3);
+  targetAngle = (fullTurns*2*Math.PI) + (Math.PI*1.5 - center) - (currentAngle % (2*Math.PI));
+
+  duration = 3200 + Math.random()*1200;
+  startTime = performance.now();
+  spinning = true;
+  spinBtn.disabled = true;
+  requestAnimationFrame(tick);
+}
+function tick(now){
+  const t = Math.min(1, (now - startTime) / duration);
+  const eased = easeOutCubic(t);
+  const delta = targetAngle * eased;
+  const angle = (currentAngle + delta) % (2*Math.PI);
+  drawWheel(angle);
+  if(t < 1){
+    requestAnimationFrame(tick);
+  } else {
+    currentAngle = (currentAngle + targetAngle) % (2*Math.PI);
+    spinning = false;
+    spinBtn.disabled = false;
+    finalizeResult();
+  }
+}
+function finalizeResult(){
+  const text = compliments[targetIndex] || "…";
+  showCompliment(text);
+  drawWheel(currentAngle, targetIndex);
+  firework();    // 🔊 звук фейерверка
+  shootConfetti(); // 🎉 конфетти
+}
+
+function showCompliment(t){
+  complimentEl.classList.remove('fade-in');
+  void complimentEl.offsetWidth;
+  complimentEl.textContent = t;
+  complimentEl.classList.add('fade-in');
+}
+
+spinBtn.addEventListener('click', startSpin);
+resetBtn.addEventListener('click', ()=>{
+  if(spinning) return;
+  compliments = DEFAULT_COMPLIMENTS.slice();
+  drawWheel(currentAngle);
+  complimentEl.textContent = "Нажми «Крутить», чтобы порадовать Машу 💝";
+});
+
+resizeCanvas();
+
+/* ==== ЗВУК ФЕЙЕРВЕРКА (Web Audio API) ==== */
+const AudioCtx = window.AudioContext || window.webkitAudioContext;
+const audioCtx = AudioCtx ? new AudioCtx() : null;
+
+function firework(){
+  if(!audioCtx) return;
+  const start = audioCtx.currentTime;
+
+  // 1) "Свист" взлёта (короткий глайд вверх)
+  const osc = audioCtx.createOscillator();
+  const gain1 = audioCtx.createGain();
+  osc.type = "sine";
+  osc.frequency.setValueAtTime(600, start);
+  osc.frequency.exponentialRampToValueAtTime(1600, start + 0.35);
+  gain1.gain.setValueAtTime(0.0001, start);
+  gain1.gain.exponentialRampToValueAtTime(0.25, start + 0.05);
+  gain1.gain.exponentialRampToValueAtTime(0.0001, start + 0.36);
+  osc.connect(gain1).connect(audioCtx.destination);
+  osc.start(start);
+  osc.stop(start + 0.4);
+
+  // 2) "Бум" — шум с падающим фильтром
+  const boomDur = 0.9;
+  const noise = audioCtx.createBufferSource();
+  const buffer = audioCtx.createBuffer(1, audioCtx.sampleRate * boomDur, audioCtx.sampleRate);
+  const data = buffer.getChannelData(0);
+  for(let i=0;i<data.length;i++) data[i] = (Math.random()*2-1) * (1 - i/data.length); // затухание
+  noise.buffer = buffer;
+
+  const lp = audioCtx.createBiquadFilter();
+  lp.type = "lowpass";
+  lp.frequency.setValueAtTime(8000, start + 0.35);
+  lp.frequency.exponentialRampToValueAtTime(600, start + 0.35 + boomDur);
+
+  const boomGain = audioCtx.createGain();
+  boomGain.gain.setValueAtTime(0.0001, start + 0.35);
+  boomGain.gain.exponentialRampToValueAtTime(0.7, start + 0.40);
+  boomGain.gain.exponentialRampToValueAtTime(0.0001, start + 0.35 + boomDur);
+
+  noise.connect(lp).connect(boomGain).connect(audioCtx.destination);
+  noise.start(start + 0.35);
+
+  // 3) "Треск" — несколько коротких щелчков
+  for(let k=0;k<6;k++){
+    const t0 = start + 0.45 + Math.random()*0.5;
+    const crack = audioCtx.createBufferSource();
+    const b = audioCtx.createBuffer(1, audioCtx.sampleRate*0.08, audioCtx.sampleRate);
+    const d = b.getChannelData(0);
+    for(let i=0;i<d.length;i++) d[i] = (Math.random()*2-1) * Math.exp(-20*i/d.length);
+    crack.buffer = b;
+    const g = audioCtx.createGain();
+    g.gain.value = 0.25;
+    crack.connect(g).connect(audioCtx.destination);
+    crack.start(t0);
+  }
+}
+
+/* ==== КОНФЕТТИ ==== */
+const confetti = document.getElementById('confettiCanvas');
+const cctx = confetti.getContext('2d');
+function sizeConfetti(){ confetti.width = innerWidth; confetti.height = innerHeight; }
+window.addEventListener('resize', sizeConfetti); sizeConfetti();
+
+let confettiParticles = [];
+function shootConfetti(){
+  confettiParticles.length = 0;
+  const N = 160;
+  for(let i=0;i<N;i++){
+    confettiParticles.push({
+      x: innerWidth/2 + (Math.random()*160-80),
+      y: innerHeight*0.2,
+      vx: (Math.random()-0.5)*6,
+      vy: Math.random()*-7 - 2,
+      g: 0.22 + Math.random()*0.06,
+      life: 90 + Math.random()*40,
+      size: 6 + Math.random()*7,
+      rot: Math.random()*Math.PI*2,
+      vr: (Math.random()-0.5)*0.3,
+      col: i%4===0? "#0077cc" : (i%4===1? "#ffd166" : (i%4===2? "#06d6a0" : "#ff6b6b"))
+    });
+  }
+  animateConfetti();
+}
+function animateConfetti(){
+  cctx.clearRect(0,0,confetti.width, confetti.height);
+  let alive = 0;
+  for(const p of confettiParticles){
+    if(p.life>0){
+      alive++;
+      p.vy += p.g; p.x += p.vx; p.y += p.vy; p.rot += p.vr; p.life--;
+      cctx.save();
+      cctx.translate(p.x, p.y);
+      cctx.rotate(p.rot);
+      cctx.fillStyle = p.col;
+      cctx.fillRect(-p.size/2, -p.size/2, p.size, p.size);
+      cctx.restore();
+    }
+  }
+  if(alive>0) requestAnimationFrame(animateConfetti);
+}
+</script>
+</body>
+</html>
